@@ -1,4 +1,3 @@
-from django.contrib.auth.views import LoginView
 from django.urls import path
 
 from blog import views
@@ -28,10 +27,5 @@ urlpatterns = [
         'posts/<int:post_id>/delete_comment/<int:comment_id>/',
         views.delete_comment,
         name='delete_comment'
-    ),
-    path(
-        'auth/registration/',
-        views.RegistrationView.as_view(),
-        name='registration'
     ),
 ]
