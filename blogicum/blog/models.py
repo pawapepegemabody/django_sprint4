@@ -1,15 +1,22 @@
 from django.contrib.auth import get_user_model
+from django.core.validators import MinValueValidator
 from django.db import models
 
 User = get_user_model()
 
 
-class Category(models.Model):
+class ServiceType(models.Model):
     title = models.CharField(
-        'Заголовок',
+        'Название услуги',
         max_length=256
     )
     description = models.TextField('Описание')
+    price = models.DecimalField(
+        'Цена',
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)]
+    )
     slug = models.SlugField(
         'Идентификатор',
         unique=True,
@@ -19,9 +26,9 @@ class Category(models.Model):
         )
     )
     is_published = models.BooleanField(
-        'Опубликовано',
+        'Доступно',
         default=True,
-        help_text='Снимите галочку, чтобы скрыть публикацию.'
+        help_text='Снимите галочку, чтобы скрыть услугу.'
     )
     created_at = models.DateTimeField(
         'Добавлено',
@@ -29,22 +36,26 @@ class Category(models.Model):
     )
 
     class Meta:
-        verbose_name = 'категория'
-        verbose_name_plural = 'Категории'
+        verbose_name = 'тип услуги'
+        verbose_name_plural = 'Типы услуг'
 
     def __str__(self):
         return self.title
 
 
-class Location(models.Model):
+class Box(models.Model):
     name = models.CharField(
-        'Название места',
+        'Название бокса',
         max_length=256
     )
+    capacity = models.PositiveIntegerField(
+        'Вместимость (машин)',
+        default=2
+    )
     is_published = models.BooleanField(
-        'Опубликовано',
+        'Доступен',
         default=True,
-        help_text='Снимите галочку, чтобы скрыть публикацию.'
+        help_text='Снимите галочку, чтобы скрыть бокс.'
     )
     created_at = models.DateTimeField(
         'Добавлено',
@@ -52,80 +63,132 @@ class Location(models.Model):
     )
 
     class Meta:
-        verbose_name = 'местоположение'
-        verbose_name_plural = 'Местоположения'
+        verbose_name = 'бокс'
+        verbose_name_plural = 'Боксы'
 
     def __str__(self):
         return self.name
 
 
-class Post(models.Model):
-    title = models.CharField('Заголовок', max_length=256)
-    text = models.TextField('Текст')
-    pub_date = models.DateTimeField(
-        'Дата и время публикации',
+class Order(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Ожидает'),
+        ('in_progress', 'В работе'),
+        ('completed', 'Завершено'),
+        ('cancelled', 'Отменено'),
+    ]
+
+    car_model = models.CharField('Модель автомобиля', max_length=256)
+    car_number = models.CharField('Гос. номер', max_length=20)
+    description = models.TextField('Примечания', blank=True)
+    appointment_date = models.DateTimeField(
+        'Дата и время записи',
         help_text=(
             'Если установить дату и время в будущем — '
-            'можно делать отложенные публикации.'
+            'можно делать отложенные записи.'
         )
     )
-    author = models.ForeignKey(
+    client = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        verbose_name='Автор публикации'
+        related_name='orders',
+        verbose_name='Клиент'
     )
-    location = models.ForeignKey(
-        Location,
+    washer = models.ForeignKey(
+        User,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        verbose_name='Местоположение'
+        related_name='assigned_orders',
+        verbose_name='Мойщик',
+        limit_choices_to={'is_staff': False}
     )
-    category = models.ForeignKey(
-        Category,
+    box = models.ForeignKey(
+        Box,
         on_delete=models.SET_NULL,
         null=True,
-        verbose_name='Категория'
+        blank=True,
+        verbose_name='Бокс'
     )
-    image = models.ImageField(
-        'Изображение',
-        upload_to='posts',
+    service_type = models.ForeignKey(
+        ServiceType,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name='Тип услуги'
+    )
+    price = models.DecimalField(
+        'Цена',
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        null=True,
         blank=True
     )
-    is_published = models.BooleanField(
-        'Опубликовано',
-        default=True,
-        help_text='Снимите галочку, чтобы скрыть публикацию.'
+    discount = models.DecimalField(
+        'Скидка (%)',
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)]
     )
-    created_at = models.DateTimeField('Добавлено', auto_now_add=True)
+    car_image = models.ImageField(
+        'Фото автомобиля',
+        upload_to='cars',
+        blank=True
+    )
+    status = models.CharField(
+        'Статус',
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    is_published = models.BooleanField(
+        'Активна',
+        default=True,
+        help_text='Снимите галочку, чтобы скрыть запись.'
+    )
+    created_at = models.DateTimeField('Создано', auto_now_add=True)
 
     class Meta:
-        verbose_name = 'публикация'
-        verbose_name_plural = 'Публикации'
+        verbose_name = 'запись'
+        verbose_name_plural = 'Записи'
+        ordering = ('-appointment_date',)
 
     def __str__(self):
-        return self.title
+        return f'{self.car_model} - {self.appointment_date}'
+
+    def get_final_price(self):
+        """Рассчитать итоговую цену с учетом скидки"""
+        if self.price:
+            discount_amount = self.price * (self.discount / 100)
+            return self.price - discount_amount
+        return None
 
 
-class Comment(models.Model):
-    text = models.TextField('Текст комментария')
-    post = models.ForeignKey(
-        Post,
+class Review(models.Model):
+    text = models.TextField('Текст отзыва')
+    rating = models.PositiveIntegerField(
+        'Оценка',
+        choices=[(i, i) for i in range(1, 6)],
+        default=5
+    )
+    order = models.ForeignKey(
+        Order,
         on_delete=models.CASCADE,
-        related_name='comments',
-        verbose_name='Публикация'
+        related_name='reviews',
+        verbose_name='Запись'
     )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        verbose_name='Автор комментария'
+        verbose_name='Автор отзыва'
     )
     created_at = models.DateTimeField('Добавлено', auto_now_add=True)
 
     class Meta:
-        verbose_name = 'комментарий'
-        verbose_name_plural = 'Комментарии'
+        verbose_name = 'отзыв'
+        verbose_name_plural = 'Отзывы'
         ordering = ('created_at',)
 
     def __str__(self):
-        return f'Комментарий {self.author.username} к {self.post.title}'
+        return f'Отзыв {self.author.username} на {self.order.car_model}'

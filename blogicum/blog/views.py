@@ -8,23 +8,23 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView
 
-from .forms import CommentForm, PostForm, UserEditForm
-from .models import Category, Comment, Post
+from .forms import OrderForm, ReviewForm, UserEditForm
+from .models import Box, Order, Review, ServiceType
 
 User = get_user_model()
 
 
 def index(request):
-    post_list = Post.objects.select_related(
-        'category', 'location', 'author'
+    order_list = Order.objects.select_related(
+        'service_type', 'box', 'client', 'washer'
     ).filter(
         is_published=True,
-        category__is_published=True,
-        pub_date__lte=timezone.now()
+        service_type__is_published=True,
+        appointment_date__lte=timezone.now()
     ).annotate(
-        comment_count=Count('comments')
-    ).order_by('-pub_date')
-    paginator = Paginator(post_list, 10)
+        comment_count=Count('reviews')
+    ).order_by('-appointment_date')
+    paginator = Paginator(order_list, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     context = {'page_obj': page_obj}
@@ -32,45 +32,47 @@ def index(request):
 
 
 def post_detail(request, id):
-    post = get_object_or_404(
-        Post.objects.select_related('category', 'location', 'author'),
+    order = get_object_or_404(
+        Order.objects.select_related(
+            'service_type', 'box', 'client', 'washer'
+        ),
         id=id
     )
-    if not post.author == request.user:
-        if (not post.is_published or
-                (post.category and not post.category.is_published) or
-                post.pub_date > timezone.now()):
+    if not order.client == request.user:
+        if (not order.is_published or
+                (order.service_type and not order.service_type.is_published) or
+                order.appointment_date > timezone.now()):
             return redirect('blog:index')
-    comments = post.comments.all()
-    form = CommentForm()
+    reviews = order.reviews.all()
+    form = ReviewForm()
     context = {
-        'post': post,
-        'comments': comments,
+        'post': order,
+        'comments': reviews,
         'form': form
     }
     return render(request, 'blog/detail.html', context)
 
 
 def category_posts(request, category_slug):
-    category = get_object_or_404(
-        Category,
+    service_type = get_object_or_404(
+        ServiceType,
         slug=category_slug,
         is_published=True
     )
-    post_list = Post.objects.select_related(
-        'category', 'location', 'author'
+    order_list = Order.objects.select_related(
+        'service_type', 'box', 'client', 'washer'
     ).filter(
-        category=category,
+        service_type=service_type,
         is_published=True,
-        pub_date__lte=timezone.now()
+        appointment_date__lte=timezone.now()
     ).annotate(
-        comment_count=Count('comments')
-    ).order_by('-pub_date')
-    paginator = Paginator(post_list, 10)
+        comment_count=Count('reviews')
+    ).order_by('-appointment_date')
+    paginator = Paginator(order_list, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     context = {
-        'category': category,
+        'category': service_type,
         'page_obj': page_obj
     }
     return render(request, 'blog/category.html', context)
@@ -78,24 +80,26 @@ def category_posts(request, category_slug):
 
 @login_required
 def create_post(request):
-    form = PostForm(request.POST or None, files=request.FILES or None)
+    form = OrderForm(request.POST or None, files=request.FILES or None)
     if form.is_valid():
-        post = form.save(commit=False)
-        post.author = request.user
-        post.save()
+        order = form.save(commit=False)
+        order.client = request.user
+        if order.service_type:
+            order.price = order.service_type.price
+        order.save()
         return redirect('blog:profile', username=request.user.username)
     return render(request, 'blog/create.html', {'form': form})
 
 
 @login_required
 def edit_post(request, post_id):
-    post = get_object_or_404(Post, id=post_id)
-    if post.author != request.user:
+    order = get_object_or_404(Order, id=post_id)
+    if order.client != request.user:
         return redirect('blog:post_detail', id=post_id)
-    form = PostForm(
+    form = OrderForm(
         request.POST or None,
         files=request.FILES or None,
-        instance=post
+        instance=order
     )
     if form.is_valid():
         form.save()
@@ -105,26 +109,26 @@ def edit_post(request, post_id):
 
 @login_required
 def delete_post(request, post_id):
-    post = get_object_or_404(Post, id=post_id)
-    if post.author != request.user:
+    order = get_object_or_404(Order, id=post_id)
+    if order.client != request.user:
         return redirect('blog:post_detail', id=post_id)
-    form = PostForm(instance=post)
+    form = OrderForm(instance=order)
     if request.method == 'POST':
-        post.delete()
+        order.delete()
         return redirect('blog:profile', username=request.user.username)
     return render(request, 'blog/create.html', {'form': form})
 
 
 def profile(request, username):
     profile_user = get_object_or_404(User, username=username)
-    post_list = Post.objects.filter(
-        author=profile_user
+    order_list = Order.objects.filter(
+        client=profile_user
     ).select_related(
-        'category', 'location', 'author'
+        'service_type', 'box', 'client', 'washer'
     ).annotate(
-        comment_count=Count('comments')
-    ).order_by('-pub_date')
-    paginator = Paginator(post_list, 10)
+        comment_count=Count('reviews')
+    ).order_by('-appointment_date')
+    paginator = Paginator(order_list, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     context = {
@@ -148,37 +152,37 @@ def edit_profile(request):
 
 @login_required
 def add_comment(request, post_id):
-    post = get_object_or_404(Post, id=post_id)
-    form = CommentForm(request.POST)
+    order = get_object_or_404(Order, id=post_id)
+    form = ReviewForm(request.POST)
     if form.is_valid():
-        comment = form.save(commit=False)
-        comment.author = request.user
-        comment.post = post
-        comment.save()
+        review = form.save(commit=False)
+        review.author = request.user
+        review.order = order
+        review.save()
     return redirect('blog:post_detail', id=post_id)
 
 
 @login_required
 def edit_comment(request, post_id, comment_id):
-    comment = get_object_or_404(Comment, id=comment_id, post_id=post_id)
-    if comment.author != request.user:
+    review = get_object_or_404(Review, id=comment_id, order_id=post_id)
+    if review.author != request.user:
         return redirect('blog:post_detail', id=post_id)
-    form = CommentForm(request.POST or None, instance=comment)
+    form = ReviewForm(request.POST or None, instance=review)
     if form.is_valid():
         form.save()
         return redirect('blog:post_detail', id=post_id)
-    return render(request, 'blog/comment.html', {'form': form, 'comment': comment})
+    return render(request, 'blog/comment.html', {'form': form, 'comment': review})
 
 
 @login_required
 def delete_comment(request, post_id, comment_id):
-    comment = get_object_or_404(Comment, id=comment_id, post_id=post_id)
-    if comment.author != request.user:
+    review = get_object_or_404(Review, id=comment_id, order_id=post_id)
+    if review.author != request.user:
         return redirect('blog:post_detail', id=post_id)
     if request.method == 'POST':
-        comment.delete()
+        review.delete()
         return redirect('blog:post_detail', id=post_id)
-    return render(request, 'blog/comment.html', {'comment': comment})
+    return render(request, 'blog/comment.html', {'comment': review})
 
 
 class RegistrationView(CreateView):

@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}
-  Лента записей
+  Записи на мойку
 {% endblock %}
 {% block content %}
+  <h1 class="mb-5">Записи на мойку</h1>
   {% for post in page_obj %}
     <article class="mb-5">
       {% include "includes/post_card.html" %}

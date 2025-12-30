@@ -1,7 +1,7 @@
-{% if post.category %}
-  <a class="text-muted" href="{% url 'blog:category_posts' post.category.slug %}">
-    «{{ post.category.title }}»
+{% if post.service_type %}
+  <a class="text-muted" href="{% url 'blog:category_posts' post.service_type.slug %}">
+    «{{ post.service_type.title }}»
   </a>
 {% else %}
-  Без категории
+  Не указана
 {% endif %}

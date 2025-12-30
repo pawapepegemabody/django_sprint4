@@ -1,38 +1,53 @@
 {% extends "base.html" %}
 {% block title %}
-  {{ post.title }} | {% if post.location and post.location.is_published %}{{ post.location.name }}{% else %}Планета Земля{% endif %} |
-  {{ post.pub_date|date:"d E Y" }}
+  {{ post.car_model }} | {% if post.box and post.box.is_published %}{{ post.box.name }}{% else %}Не указан{% endif %} |
+  {{ post.appointment_date|date:"d E Y" }}
 {% endblock %}
 {% block content %}
   <div class="col d-flex justify-content-center">
     <div class="card" style="width: 40rem;">
       <div class="card-body">
-        {% if post.image %}
-          <a href="{{ post.image.url }}" target="_blank">
-            <img class="border-3 rounded img-fluid img-thumbnail mb-2 mx-auto d-block" src="{{ post.image.url }}">
+        {% if post.car_image %}
+          <a href="{{ post.car_image.url }}" target="_blank">
+            <img class="border-3 rounded img-fluid img-thumbnail mb-2 mx-auto d-block" src="{{ post.car_image.url }}">
           </a>
         {% endif %}
-        <h5 class="card-title">{{ post.title }}</h5>
+        <h5 class="card-title">{{ post.car_model }} ({{ post.car_number }})</h5>
         <h6 class="card-subtitle mb-2 text-muted">
           <small>
             {% if not post.is_published %}
-              <p class="text-danger">Пост снят с публикации админом</p>
-            {% elif post.category and not post.category.is_published %}
-              <p class="text-danger">Выбранная категория снята с публикации админом</p>
+              <p class="text-danger">Запись отменена администратором</p>
+            {% elif post.service_type and not post.service_type.is_published %}
+              <p class="text-danger">Выбранная услуга снята с публикации</p>
             {% endif %}
-            {{ post.pub_date|date:"d E Y, H:i" }} | {% if post.location and post.location.is_published %}{{ post.location.name }}{% else %}Планета Земля{% endif %}<br>
-            От автора <a class="text-muted" href="{% url 'blog:profile' post.author.username %}">@{{ post.author.username }}</a> в
-            категории {% include "includes/category_link.html" %}
+            {{ post.appointment_date|date:"d E Y, H:i" }} | {% if post.box and post.box.is_published %}{{ post.box.name }}{% else %}Не указан{% endif %}<br>
+            Клиент <a class="text-muted" href="{% url 'blog:profile' post.client.username %}">@{{ post.client.username }}</a> | 
+            Услуга: {% include "includes/category_link.html" %}
+            {% if post.washer %}
+              | Мойщик: {{ post.washer.username }}
+            {% endif %}
+            {% if post.status %}
+              | Статус: {{ post.get_status_display }}
+            {% endif %}
           </small>
         </h6>
-        <p class="card-text">{{ post.text|linebreaksbr }}</p>
-        {% if user == post.author %}
+        {% if post.description %}
+          <p class="card-text">{{ post.description|linebreaksbr }}</p>
+        {% endif %}
+        {% if post.get_final_price %}
+          <p class="card-text"><strong>Цена: {{ post.get_final_price|floatformat:2 }} руб.</strong>
+          {% if post.discount > 0 %}
+            <span class="text-success">(скидка {{ post.discount }}%)</span>
+          {% endif %}
+          </p>
+        {% endif %}
+        {% if user == post.client %}
           <div class="mb-2">
             <a class="btn btn-sm text-muted" href="{% url 'blog:edit_post' post.id %}" role="button">
-              Отредактировать публикацию
+              Редактировать запись
             </a>
             <a class="btn btn-sm text-muted" href="{% url 'blog:delete_post' post.id %}" role="button">
-              Удалить публикацию
+              Отменить запись
             </a>
           </div>
         {% endif %}
